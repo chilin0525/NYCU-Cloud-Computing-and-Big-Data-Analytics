@@ -151,34 +151,38 @@ weight_decay = 0.005
 nb_classes = 39
 input_shape = (40,224,224,3)
 inputs = tf.keras.layers.Input(input_shape)
-x = tf.keras.layers.Conv3D(64,(3,3,3),strides=(1,1,1),padding='same',
-            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(inputs)
-x = tf.keras.layers.MaxPool3D((2,2,1),strides=(2,2,1),padding='same')(x)
+model = tf.keras.models.Sequential()
 
-x = tf.keras.layers.Conv3D(128,(3,3,3),strides=(1,1,1),padding='same',
-            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
-x = tf.keras.layers.MaxPool3D((2,2,2),strides=(2,2,2),padding='same')(x)
+# Define the Model Architecture.
+########################################################################################################################
 
-x = tf.keras.layers.Conv3D(128,(3,3,3),strides=(1,1,1),padding='same',
-            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
-x = tf.keras.layers.MaxPool3D((2,2,2),strides=(2,2,2),padding='same')(x)
+model.add(tf.keras.layers.ConvLSTM2D(filters = 4, kernel_size = (3, 3), activation = 'tanh',data_format = "channels_last",
+                        recurrent_dropout=0.2, return_sequences=True, input_shape = input_shape))
 
-x = tf.keras.layers.Conv3D(256,(3,3,3),strides=(1,1,1),padding='same',
-            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
-x = tf.keras.layers.MaxPool3D((2,2,2),strides=(2,2,2),padding='same')(x)
+model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
+model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.2)))
 
-x = tf.keras.layers.Conv3D(256, (3, 3, 3), strides=(1, 1, 1), padding='same',
-            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
-x = tf.keras.layers.MaxPool3D((2, 2, 2), strides=(2, 2, 2), padding='same')(x)
+model.add(tf.keras.layers.ConvLSTM2D(filters = 8, kernel_size = (3, 3), activation = 'tanh', data_format = "channels_last",
+                        recurrent_dropout=0.2, return_sequences=True))
 
-x = tf.keras.layers.Flatten()(x)
-x = tf.keras.layers.Dense(2048,activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
-x = tf.keras.layers.Dropout(0.5)(x)
-x = tf.keras.layers.Dense(2048,activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
-x = tf.keras.layers.Dropout(0.5)(x)
-x = tf.keras.layers.Dense(nb_classes,kernel_regularizer=regularizers.L2(weight_decay))(x)
-x = tf.keras.layers.Activation('softmax')(x)
-model = Model(inputs, x)
+model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
+model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.2)))
+
+model.add(tf.keras.layers.ConvLSTM2D(filters = 14, kernel_size = (3, 3), activation = 'tanh', data_format = "channels_last",
+                        recurrent_dropout=0.2, return_sequences=True))
+
+model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
+model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.2)))
+
+model.add(tf.keras.layers.ConvLSTM2D(filters = 16, kernel_size = (3, 3), activation = 'tanh', data_format = "channels_last",
+                        recurrent_dropout=0.2, return_sequences=True))
+
+model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
+#model.add(TimeDistributed(Dropout(0.2)))
+
+model.add(tf.keras.layers.Flatten()) 
+
+model.add(tf.keras.layers.Dense(39, activation = "softmax"))
 
 print(model.summary())
 
