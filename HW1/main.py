@@ -144,30 +144,41 @@ test_files = list()
 
 test_files = [os.path.join(test_dir_path, i) for i in os.listdir(test_dir_path)]
 # test_files = [test_files[0], test_files[1]]
+from tensorflow.keras import regularizers
+from keras.models import Model
 
-model = tf.keras.models.Sequential()
+weight_decay = 0.005
+nb_classes = 39
+input_shape = (40,224,224,3)
+inputs = tf.keras.layers.Input(input_shape)
+x = tf.keras.layers.Conv3D(64,(3,3,3),strides=(1,1,1),padding='same',
+            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(inputs)
+x = tf.keras.layers.MaxPool3D((2,2,1),strides=(2,2,1),padding='same')(x)
 
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(16, (3, 3), padding='same',activation = 'relu'),
-                            input_shape = (40, 224, 224, 3)))
+x = tf.keras.layers.Conv3D(128,(3,3,3),strides=(1,1,1),padding='same',
+            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
+x = tf.keras.layers.MaxPool3D((2,2,2),strides=(2,2,2),padding='same')(x)
 
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D((4, 4)))) 
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.25)))
+x = tf.keras.layers.Conv3D(128,(3,3,3),strides=(1,1,1),padding='same',
+            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
+x = tf.keras.layers.MaxPool3D((2,2,2),strides=(2,2,2),padding='same')(x)
 
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(32, (3, 3), padding='same',activation = 'relu')))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D((4, 4))))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.25)))
+x = tf.keras.layers.Conv3D(256,(3,3,3),strides=(1,1,1),padding='same',
+            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
+x = tf.keras.layers.MaxPool3D((2,2,2),strides=(2,2,2),padding='same')(x)
 
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(64, (3, 3), padding='same',activation = 'relu')))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D((2, 2))))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.25)))
+x = tf.keras.layers.Conv3D(256, (3, 3, 3), strides=(1, 1, 1), padding='same',
+            activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
+x = tf.keras.layers.MaxPool3D((2, 2, 2), strides=(2, 2, 2), padding='same')(x)
 
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(64, (3, 3), padding='same',activation = 'relu')))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D((2, 2))))
-#model.add(TimeDistributed(Dropout(0.25)))
-                                    
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Flatten())) 
-model.add(tf.keras.layers.LSTM(100))
-model.add(tf.keras.layers.Dense(39, activation = 'softmax'))
+x = tf.keras.layers.Flatten()(x)
+x = tf.keras.layers.Dense(2048,activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
+x = tf.keras.layers.Dropout(0.5)(x)
+x = tf.keras.layers.Dense(2048,activation='relu',kernel_regularizer=regularizers.L2(weight_decay))(x)
+x = tf.keras.layers.Dropout(0.5)(x)
+x = tf.keras.layers.Dense(nb_classes,kernel_regularizer=regularizers.L2(weight_decay))(x)
+x = tf.keras.layers.Activation('softmax')(x)
+model = Model(inputs, x)
 
 print(model.summary())
 
@@ -178,7 +189,7 @@ for class_dir in train_dirs:
     class_dir_files = os.listdir(f"{train_dir_path}/{class_dir}")
     train, valid = train_test_split(
         class_dir_files,
-        test_size=0.2,
+        test_size=0.1,
         random_state=123
     )   
     train_files.extend([(f"{train_dir_path}/{class_dir}/{i}", class_dir) for i in train])
@@ -221,13 +232,13 @@ model.compile(
     metrics=['accuracy']
 )
 
-# history = model.fit(
-#     train_dataset,
-#     validation_data=valid_dataset,
-#     epochs=30,
-# )
-# model.save(f"CNN_10_09_2")
-model = tf.keras.models.load_model(f"CNN_10_09_2")
+history = model.fit(
+    train_dataset,
+    validation_data=valid_dataset,
+    epochs=20,
+)
+model.save(f"CNN_10_09_2")
+# model = tf.keras.models.load_model(f"CNN_10_09_2")
 
 # plt.plot(history.history['accuracy'])
 # plt.title('c accuracy')
