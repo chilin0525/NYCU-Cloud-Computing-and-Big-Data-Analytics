@@ -29,11 +29,11 @@ def read_mp4(mp4_filename: str)-> List[np.ndarray]:
     frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # if frame length < SEQ_LENGTH, padding by repeat image
-    more_40_flag = frame_length>40
-    skip_num = int(frame_length/40)-1
+    more_40_flag = frame_length>60
+    skip_num = int(frame_length/60)-1
 
     if skip_num>=0:
-        skip_mod = frame_length%40
+        skip_mod = frame_length%60
         if skip_mod<=0:
             skip_cnt = skip_num
         else:
@@ -74,7 +74,7 @@ def read_mp4(mp4_filename: str)-> List[np.ndarray]:
     # if number of frame less then require seq length
     # repeating last image
     last_frame = frames[-1]
-    while len(frames)<40:
+    while len(frames)<60:
         frames.append(last_frame)
 
     frames = np.array(frames)
@@ -148,7 +148,7 @@ test_files = [os.path.join(test_dir_path, i) for i in os.listdir(test_dir_path)]
 model = tf.keras.models.Sequential()
 
 model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(16, (3, 3), padding='same',activation = 'relu'),
-                            input_shape = (40, 224, 224, 3)))
+                            input_shape = (60, 224, 224, 3)))
 
 model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D((4, 4)))) 
 model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.25)))
@@ -196,54 +196,56 @@ random.shuffle(valid_files)
 train_dataset = tf.data.Dataset.from_generator(
     data_generator,
     args=(train_files,),
-    output_types=(tf.float32, tf.float32),
-    output_shapes=([None, 40, 224, 224, 3], [None])
+    output_types=(tf.float16, tf.float16),
+    output_shapes=([None, 60, 224, 224, 3], [None])
 )
 
 valid_dataset = tf.data.Dataset.from_generator(
     data_generator,
     args=(valid_files,),
-    output_types=(tf.float32, tf.float32),
-    output_shapes=([None, 40, 224, 224, 3], [None])
+    output_types=(tf.float16, tf.float16),
+    output_shapes=([None, 60, 224, 224, 3], [None])
 )
 
 test_dataset = tf.data.Dataset.from_generator(
     testdata_generator,
     args=(test_files,),
-    output_types=(tf.float32),
-    output_shapes=([None, 40, 224, 224, 3])
+    output_types=(tf.float16),
+    output_shapes=([None, 60, 224, 224, 3])
 )
 
-opt = tf.keras.optimizers.Adam(learning_rate=0.0001)
+opt = tf.keras.optimizers.Adam(learning_rate=0.00005)
 model.compile(
     optimizer=opt, 
     loss=tf.keras.losses.SparseCategoricalCrossentropy(), 
     metrics=['accuracy']
 )
 
-# history = model.fit(
-#     train_dataset,
-#     validation_data=valid_dataset,
-#     epochs=30,
-# )
-# model.save(f"CNN_10_09_2")
-model = tf.keras.models.load_model(f"CNN_10_09_2")
+history = model.fit(
+    train_dataset,
+    validation_data=valid_dataset,
+    epochs=20,
+)
+model.save(f"CNN_10_11")
+# model = tf.keras.models.load_model(f"CNN_10_11")
 
-# plt.plot(history.history['accuracy'])
-# plt.title('c accuracy')
-# plt.ylabel('accuracy')
-# plt.xlabel('epoch')
-# plt.legend(['train'], loc='upper left')
-# plt.savefig(f"train_img/acc.png")
-# plt.close()
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.title('c accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.savefig(f"acc.png")
+plt.close()
 
-# plt.plot(history.history['loss'])
-# plt.title('model loss')
-# plt.ylabel('loss')
-# plt.xlabel('epoch')
-# plt.legend(['train'], loc='upper left')
-# plt.savefig(f"train_img/loss.png")
-# plt.close()
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.savefig(f"loss.png")
+plt.close()
 
 result = model.predict(
     test_dataset
