@@ -210,21 +210,21 @@ random.shuffle(valid_files)
 # generate Dataset
 train_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(train_files,),
+    args=(train_files, 32),
     output_types=(tf.float32, tf.float32),
     output_shapes=([None, 40, 224, 224, 3], [None])
 )
 
 valid_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(valid_files,),
+    args=(valid_files, 32),
     output_types=(tf.float32, tf.float32),
     output_shapes=([None, 40, 224, 224, 3], [None])
 )
 
 test_dataset = tf.data.Dataset.from_generator(
     testdata_generator,
-    args=(test_files,),
+    args=(test_files, 32),
     output_types=(tf.float32),
     output_shapes=([None, 40, 224, 224, 3])
 )
