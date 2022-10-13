@@ -10,6 +10,8 @@ import pandas as pd
 import random
 
 
+SEQ = 80
+
 def most_common(lst):
     lst = Counter(lst)
     return lst.most_common(1)[0][0]
@@ -29,11 +31,11 @@ def read_mp4(mp4_filename: str)-> List[np.ndarray]:
     frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # if frame length < SEQ_LENGTH, padding by repeat image
-    more_40_flag = frame_length>40
-    skip_num = int(frame_length/40)-1
+    more_40_flag = frame_length>SEQ
+    skip_num = int(frame_length/SEQ)-1
 
     if skip_num>=0:
-        skip_mod = frame_length%40
+        skip_mod = frame_length%SEQ
         if skip_mod<=0:
             skip_cnt = skip_num
         else:
@@ -62,7 +64,7 @@ def read_mp4(mp4_filename: str)-> List[np.ndarray]:
                 skip_mod -= 1            
 
         # print(ret, frame/255.0, frame.shape, type(frame))
-        frame = crop_center_square(frame)
+        # frame = crop_center_square(frame)
         frame = cv2.resize(frame, (224, 224))
         frame = frame[:, :, [2, 1, 0]]
 
@@ -74,7 +76,7 @@ def read_mp4(mp4_filename: str)-> List[np.ndarray]:
     # if number of frame less then require seq length
     # repeating last image
     last_frame = frames[-1]
-    while len(frames)<40:
+    while len(frames)<SEQ:
         frames.append(last_frame)
 
     frames = np.array(frames)
@@ -149,7 +151,7 @@ from keras.models import Model
 
 weight_decay = 0.005
 nb_classes = 39
-input_shape = (40,224,224,3)
+input_shape = (SEQ,224,224,3)
 inputs = tf.keras.layers.Input(input_shape)
 model = tf.keras.models.Sequential()
 
@@ -157,25 +159,25 @@ model = tf.keras.models.Sequential()
 ########################################################################################################################
 
 model.add(tf.keras.layers.ConvLSTM2D(filters = 4, kernel_size = (3, 3), activation = 'tanh',data_format = "channels_last",
-                        recurrent_dropout=0.2, return_sequences=True, input_shape = input_shape))
+                        recurrent_dropout=0.3, return_sequences=True, input_shape = input_shape))
 
 model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
 model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.2)))
 
 model.add(tf.keras.layers.ConvLSTM2D(filters = 8, kernel_size = (3, 3), activation = 'tanh', data_format = "channels_last",
-                        recurrent_dropout=0.2, return_sequences=True))
+                        recurrent_dropout=0.3, return_sequences=True))
 
 model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
 model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.2)))
 
 model.add(tf.keras.layers.ConvLSTM2D(filters = 14, kernel_size = (3, 3), activation = 'tanh', data_format = "channels_last",
-                        recurrent_dropout=0.2, return_sequences=True))
+                        recurrent_dropout=0.3, return_sequences=True))
 
 model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
 model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.2)))
 
 model.add(tf.keras.layers.ConvLSTM2D(filters = 16, kernel_size = (3, 3), activation = 'tanh', data_format = "channels_last",
-                        recurrent_dropout=0.2, return_sequences=True))
+                        recurrent_dropout=0.3, return_sequences=True))
 
 model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
 #model.add(TimeDistributed(Dropout(0.2)))
@@ -210,55 +212,63 @@ random.shuffle(valid_files)
 # generate Dataset
 train_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(train_files, 32),
+    args=(train_files, 4),
     output_types=(tf.float32, tf.float32),
-    output_shapes=([None, 40, 224, 224, 3], [None])
+    output_shapes=([None, SEQ, 224, 224, 3], [None])
 )
 
 valid_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(valid_files, 32),
+    args=(valid_files, 4),
     output_types=(tf.float32, tf.float32),
-    output_shapes=([None, 40, 224, 224, 3], [None])
+    output_shapes=([None, SEQ, 224, 224, 3], [None])
 )
 
 test_dataset = tf.data.Dataset.from_generator(
     testdata_generator,
-    args=(test_files, 32),
+    args=(test_files, 4),
     output_types=(tf.float32),
-    output_shapes=([None, 40, 224, 224, 3])
+    output_shapes=([None, SEQ, 224, 224, 3])
 )
 
+
+from tensorflow.keras.callbacks import ModelCheckpoint
+checkpoint = ModelCheckpoint("best_model.hdf5", monitor='loss', verbose=1,save_best_only=True, mode='auto', period=1)
 opt = tf.keras.optimizers.Adam(learning_rate=0.0001)
 model.compile(
     optimizer=opt, 
     loss=tf.keras.losses.SparseCategoricalCrossentropy(), 
-    metrics=['accuracy']
+    metrics=['accuracy'],
 )
 
 history = model.fit(
     train_dataset,
     validation_data=valid_dataset,
     epochs=20,
+    batch_size=4,
+    shuffle = True,
+    callbacks=[checkpoint]
 )
-model.save(f"CNN_10_09_2")
+model.save(f"CNNvLSTM_1013")
 # model = tf.keras.models.load_model(f"CNN_10_09_2")
 
-# plt.plot(history.history['accuracy'])
-# plt.title('c accuracy')
-# plt.ylabel('accuracy')
-# plt.xlabel('epoch')
-# plt.legend(['train'], loc='upper left')
-# plt.savefig(f"train_img/acc.png")
-# plt.close()
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.title('c accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.savefig(f"acc.png")
+plt.close()
 
-# plt.plot(history.history['loss'])
-# plt.title('model loss')
-# plt.ylabel('loss')
-# plt.xlabel('epoch')
-# plt.legend(['train'], loc='upper left')
-# plt.savefig(f"train_img/loss.png")
-# plt.close()
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.savefig(f"loss.png")
+plt.close()
 
 result = model.predict(
     test_dataset
