@@ -12,6 +12,7 @@ import random
 
 SEQ = 80
 
+
 def most_common(lst):
     lst = Counter(lst)
     return lst.most_common(1)[0][0]
@@ -107,8 +108,8 @@ def data_generator(filename_list: List[str], batch_size=1):
             mp4_filename, ground_true = filename_list[idx]
             mp4_filename = mp4_filename.decode('ascii')
             pixel_data = read_mp4(mp4_filename)
-            pixel_data_list.append(pixel_data)
-            ground_true_list.append(int(ground_true))
+            pixel_data_list.extend(pixel_data)
+            ground_true_list.extend([int(ground_true)]*len(pixel_data))
             idx += 1
         yield (pixel_data_list, ground_true_list)
 
@@ -118,6 +119,7 @@ def testdata_generator(filename_list: List[str], batch_size=1):
     would yield each frame data in video and ground true label(class)
     """
     idx = 0
+
     while idx<len(filename_list):
         pixel_data_list = list()
         for j in range(batch_size):
@@ -126,7 +128,7 @@ def testdata_generator(filename_list: List[str], batch_size=1):
             mp4_filename = filename_list[idx]
             mp4_filename = mp4_filename.decode('ascii')
             pixel_data = read_mp4(mp4_filename)
-            pixel_data_list.append(pixel_data)
+            pixel_data_list.extend(pixel_data)
             idx += 1
         yield pixel_data_list
 
@@ -151,40 +153,21 @@ from keras.models import Model
 
 weight_decay = 0.005
 nb_classes = 39
-input_shape = (SEQ,224,224,3)
+input_shape = (None,224,224,3)
 inputs = tf.keras.layers.Input(input_shape)
-model = tf.keras.models.Sequential()
 
 # Define the Model Architecture.
 ########################################################################################################################
 
-model.add(tf.keras.layers.ConvLSTM2D(filters = 4, kernel_size = (3, 3), activation = 'tanh',data_format = "channels_last",
-                        recurrent_dropout=0.3, return_sequences=True, input_shape = input_shape))
-
-model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.2)))
-
-model.add(tf.keras.layers.ConvLSTM2D(filters = 8, kernel_size = (3, 3), activation = 'tanh', data_format = "channels_last",
-                        recurrent_dropout=0.3, return_sequences=True))
-
-model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.2)))
-
-model.add(tf.keras.layers.ConvLSTM2D(filters = 14, kernel_size = (3, 3), activation = 'tanh', data_format = "channels_last",
-                        recurrent_dropout=0.3, return_sequences=True))
-
-model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.2)))
-
-model.add(tf.keras.layers.ConvLSTM2D(filters = 16, kernel_size = (3, 3), activation = 'tanh', data_format = "channels_last",
-                        recurrent_dropout=0.3, return_sequences=True))
-
-model.add(tf.keras.layers.MaxPooling3D(pool_size=(1, 2, 2), padding='same', data_format='channels_last'))
-#model.add(TimeDistributed(Dropout(0.2)))
-
-model.add(tf.keras.layers.Flatten()) 
-
-model.add(tf.keras.layers.Dense(39, activation = "softmax"))
+INPUT_SHAPE = (224, 224, 3)
+inputs = tf.keras.Input(shape=INPUT_SHAPE)
+base_model = tf.keras.applications.EfficientNetB0(input_shape=INPUT_SHAPE, include_top=False, classes=39, classifier_activation='softmax')
+out = base_model(inputs)
+out = tf.keras.layers.AveragePooling2D()(out)
+out = tf.keras.layers.Flatten()(out)
+x = tf.keras.layers.Dropout(0.5)(out)
+out = tf.keras.layers.Dense(39, activation='softmax', kernel_regularizer=tf.keras.regularizers.l1_l2())(x)
+model = tf.keras.Model(inputs, out)
 
 print(model.summary())
 
@@ -196,7 +179,7 @@ for class_dir in train_dirs:
     train, valid = train_test_split(
         class_dir_files,
         test_size=0.1,
-        random_state=123
+        random_state=123,
     )   
     train_files.extend([(f"{train_dir_path}/{class_dir}/{i}", class_dir) for i in train])
     valid_files.extend([(f"{train_dir_path}/{class_dir}/{i}", class_dir) for i in valid])
@@ -212,28 +195,28 @@ random.shuffle(valid_files)
 # generate Dataset
 train_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(train_files, 4),
+    args=(train_files, 1),
     output_types=(tf.float32, tf.float32),
-    output_shapes=([None, SEQ, 224, 224, 3], [None])
+    output_shapes=([None, 224, 224, 3], [None]),
 )
 
 valid_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(valid_files, 4),
+    args=(valid_files, 1),
     output_types=(tf.float32, tf.float32),
-    output_shapes=([None, SEQ, 224, 224, 3], [None])
+    output_shapes=([None, 224, 224, 3], [None])
 )
 
 test_dataset = tf.data.Dataset.from_generator(
     testdata_generator,
-    args=(test_files, 4),
+    args=(test_files, 1),
     output_types=(tf.float32),
-    output_shapes=([None, SEQ, 224, 224, 3])
+    output_shapes=([None, 224, 224, 3])
 )
 
 
 from tensorflow.keras.callbacks import ModelCheckpoint
-checkpoint = ModelCheckpoint("best_model.hdf5", monitor='loss', verbose=1,save_best_only=True, mode='auto', period=1)
+checkpoint = ModelCheckpoint("best_model.hdf5", monitor='loss', verbose=1, save_best_only=True, mode='auto', period=1, save_weights_only=True)
 opt = tf.keras.optimizers.Adam(learning_rate=0.0001)
 model.compile(
     optimizer=opt, 
@@ -244,12 +227,13 @@ model.compile(
 history = model.fit(
     train_dataset,
     validation_data=valid_dataset,
-    epochs=20,
-    batch_size=4,
+    epochs=3,
+    # batch_size=4,
     shuffle = True,
+    batch_size = 1,
     callbacks=[checkpoint]
 )
-model.save(f"CNNvLSTM_1013")
+# model.save("CNNvLSTM_1013.h5")
 # model = tf.keras.models.load_model(f"CNN_10_09_2")
 
 plt.plot(history.history['accuracy'])
@@ -270,15 +254,28 @@ plt.legend(['train', 'val'], loc='upper left')
 plt.savefig(f"loss.png")
 plt.close()
 
+model.load_weights("/home/chilin/NYCU-Cloud-Computing-and-Big-Data-Analytics/HW1/best_model.hdf5")
+weights = model.get_weights()
+model.set_weights(weights)
+
 result = model.predict(
     test_dataset
 )
 tmp_y_pred = list()
 y_pred = list()
 
-for i in result:
+print(len(result))
+
+idx = 0
+while idx<len(result):
     # print(np.argmax(i))
-    y_pred.append(np.argmax(i))
+    tmp_result = list()
+    for i in result[idx:idx+SEQ]:
+        tmp_result.append(np.argmax(i))
+    values, counts = np.unique(tmp_result, return_counts=True)
+    ind = np.argmax(counts)
+    y_pred.append(values[ind])
+    idx += SEQ
 
 # cur = 0
 # for test_file in test_files:
@@ -293,4 +290,4 @@ df = pd.DataFrame({
     "name": [i.split("/")[-1] for i in test_files],
     "label": y_pred
 })
-df.to_csv("result_1009_tmp.csv")
+df.to_csv("result_1013.csv")
