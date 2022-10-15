@@ -1,4 +1,6 @@
+from tabnanny import check
 from typing import List
+from sklearn import metrics
 from sklearn.model_selection import train_test_split
 from collections import Counter
 import cv2
@@ -9,6 +11,7 @@ import numpy as np
 import pandas as pd
 import random
 
+SEQ = 10
 
 def most_common(lst):
     lst = Counter(lst)
@@ -29,11 +32,11 @@ def read_mp4(mp4_filename: str)-> List[np.ndarray]:
     frame_length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # if frame length < SEQ_LENGTH, padding by repeat image
-    more_40_flag = frame_length>60
-    skip_num = int(frame_length/60)-1
+    more_40_flag = frame_length>SEQ
+    skip_num = int(frame_length/SEQ)-1
 
     if skip_num>=0:
-        skip_mod = frame_length%60
+        skip_mod = frame_length%SEQ
         if skip_mod<=0:
             skip_cnt = skip_num
         else:
@@ -74,7 +77,7 @@ def read_mp4(mp4_filename: str)-> List[np.ndarray]:
     # if number of frame less then require seq length
     # repeating last image
     last_frame = frames[-1]
-    while len(frames)<60:
+    while len(frames)<SEQ:
         frames.append(last_frame)
 
     frames = np.array(frames)
@@ -145,29 +148,22 @@ test_files = list()
 test_files = [os.path.join(test_dir_path, i) for i in os.listdir(test_dir_path)]
 # test_files = [test_files[0], test_files[1]]
 
-model = tf.keras.models.Sequential()
-
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(16, (3, 3), padding='same',activation = 'relu'),
-                            input_shape = (60, 224, 224, 3)))
-
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D((4, 4)))) 
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.25)))
-
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(32, (3, 3), padding='same',activation = 'relu')))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D((4, 4))))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.25)))
-
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(64, (3, 3), padding='same',activation = 'relu')))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D((2, 2))))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dropout(0.25)))
-
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Conv2D(64, (3, 3), padding='same',activation = 'relu')))
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.MaxPooling2D((2, 2))))
-#model.add(TimeDistributed(Dropout(0.25)))
-                                    
-model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Flatten())) 
-model.add(tf.keras.layers.LSTM(100))
-model.add(tf.keras.layers.Dense(39, activation = 'softmax'))
+from keras.layers import TimeDistributed, Conv2D, Dense, MaxPooling2D, Flatten, LSTM, Dropout, BatchNormalization
+from keras import models
+model = models.Sequential()
+model.add(TimeDistributed(Conv2D(128, (3, 3), strides=(1,1),activation='relu'),input_shape=(SEQ, 224, 224, 3)))
+model.add(TimeDistributed(Conv2D(64, (3, 3), strides=(1,1),activation='relu')))
+model.add(TimeDistributed(MaxPooling2D(2,2)))
+model.add(TimeDistributed(Conv2D(64, (3, 3), strides=(1,1),activation='relu')))
+model.add(TimeDistributed(Conv2D(32, (3, 3), strides=(1,1),activation='relu')))
+model.add(TimeDistributed(MaxPooling2D(2,2)))
+model.add(TimeDistributed(BatchNormalization()))
+model.add(TimeDistributed(Flatten()))
+model.add(Dropout(0.2))
+model.add(LSTM(32,return_sequences=False,dropout=0.2)) # used 32 units
+model.add(Dense(64,activation='relu'))
+model.add(Dense(39,activation='softmax'))
+model.summary()
 
 print(model.summary())
 
@@ -195,38 +191,43 @@ random.shuffle(valid_files)
 # generate Dataset
 train_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(train_files,),
+    args=(train_files, 8),
     output_types=(tf.float16, tf.float16),
-    output_shapes=([None, 60, 224, 224, 3], [None])
+    output_shapes=([None, SEQ, 224, 224, 3], [None])
 )
 
 valid_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(valid_files,),
+    args=(valid_files, 8),
     output_types=(tf.float16, tf.float16),
-    output_shapes=([None, 60, 224, 224, 3], [None])
+    output_shapes=([None, SEQ, 224, 224, 3], [None])
 )
 
 test_dataset = tf.data.Dataset.from_generator(
     testdata_generator,
-    args=(test_files,),
+    args=(test_files, 8),
     output_types=(tf.float16),
-    output_shapes=([None, 60, 224, 224, 3])
+    output_shapes=([None, SEQ, 224, 224, 3])
 )
 
-opt = tf.keras.optimizers.Adam(learning_rate=0.00005)
+opt = tf.keras.optimizers.Adam(learning_rate=0.0001)
 model.compile(
     optimizer=opt, 
     loss=tf.keras.losses.SparseCategoricalCrossentropy(), 
     metrics=['accuracy']
 )
 
+from tensorflow.keras.callbacks import ModelCheckpoint
+checkpoint = ModelCheckpoint("best_model.hdf5", monitor='loss', verbose=1, save_best_only=True, mode='auto', period=1, save_weights_only=True)
 history = model.fit(
     train_dataset,
     validation_data=valid_dataset,
     epochs=20,
+    batch_size=8,
+    callbacks=[checkpoint],
+    shuffle=True
 )
-model.save(f"CNN_10_11")
+model.save(f"Mobilenet_10_15")
 # model = tf.keras.models.load_model(f"CNN_10_11")
 
 plt.plot(history.history['accuracy'])
@@ -270,4 +271,4 @@ df = pd.DataFrame({
     "name": [i.split("/")[-1] for i in test_files],
     "label": y_pred
 })
-df.to_csv("result_1009_tmp.csv")
+df.to_csv("result_1015.csv")
