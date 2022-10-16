@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import random
 
-SEQ = 10
+SEQ = 15
 
 def most_common(lst):
     lst = Counter(lst)
@@ -66,7 +66,7 @@ def read_mp4(mp4_filename: str)-> List[np.ndarray]:
 
         # print(ret, frame/255.0, frame.shape, type(frame))
         frame = crop_center_square(frame)
-        frame = cv2.resize(frame, (224, 224))
+        frame = cv2.resize(frame, (112, 112))
         frame = frame[:, :, [2, 1, 0]]
 
         frames.append(frame/255.0)
@@ -148,22 +148,29 @@ test_files = list()
 test_files = [os.path.join(test_dir_path, i) for i in os.listdir(test_dir_path)]
 # test_files = [test_files[0], test_files[1]]
 
-from keras.layers import TimeDistributed, Conv2D, Dense, MaxPooling2D, Flatten, LSTM, Dropout, BatchNormalization
-from keras import models
-model = models.Sequential()
-model.add(TimeDistributed(Conv2D(128, (3, 3), strides=(1,1),activation='relu'),input_shape=(SEQ, 224, 224, 3)))
-model.add(TimeDistributed(Conv2D(64, (3, 3), strides=(1,1),activation='relu')))
-model.add(TimeDistributed(MaxPooling2D(2,2)))
-model.add(TimeDistributed(Conv2D(64, (3, 3), strides=(1,1),activation='relu')))
-model.add(TimeDistributed(Conv2D(32, (3, 3), strides=(1,1),activation='relu')))
-model.add(TimeDistributed(MaxPooling2D(2,2)))
-model.add(TimeDistributed(BatchNormalization()))
-model.add(TimeDistributed(Flatten()))
+from keras.layers import TimeDistributed, Conv2D, Dense, MaxPooling2D, Flatten, LSTM, Dropout, BatchNormalization,  Activation, Reshape, Conv3D, MaxPooling3D, ZeroPadding3D, Input
+from keras.models import Sequential
+from tensorflow.keras import regularizers
+
+model = Sequential()
+model.add(Conv3D(32, kernel_size=(3, 3, 3), input_shape=(SEQ, 112, 112, 3), padding='same'))
+model.add(Activation('relu'))
+model.add(Conv3D(32, kernel_size=(3, 3, 3), padding='same', kernel_regularizer=regularizers.L2(1e-3)))
+model.add(Activation('relu'))
+model.add(MaxPooling3D(pool_size=(2, 2, 2), padding='same'))
+model.add(Dropout(0.3))
+
+model.add(Conv3D(64, kernel_size=(5, 5, 5), padding='same', kernel_regularizer=regularizers.L2(1e-3)))
+model.add(Activation('relu'))
+model.add(Conv3D(64, kernel_size=(5, 5, 5), padding='same', kernel_regularizer=regularizers.L2(1e-3)))
+model.add(Activation('relu'))
+model.add(MaxPooling3D(pool_size=(2, 2, 2), padding='same'))
+model.add(Dropout(0.3))
+
+model.add(Flatten())
+model.add(Dense(256, activation='relu'))
 model.add(Dropout(0.2))
-model.add(LSTM(32,return_sequences=False,dropout=0.2)) # used 32 units
-model.add(Dense(64,activation='relu'))
-model.add(Dense(39,activation='softmax'))
-model.summary()
+model.add(Dense(39, activation='softmax'))
 
 print(model.summary())
 
@@ -175,7 +182,7 @@ for class_dir in train_dirs:
     train, valid = train_test_split(
         class_dir_files,
         test_size=0.2,
-        random_state=123
+        shuffle=True
     )   
     train_files.extend([(f"{train_dir_path}/{class_dir}/{i}", class_dir) for i in train])
     valid_files.extend([(f"{train_dir_path}/{class_dir}/{i}", class_dir) for i in valid])
@@ -191,24 +198,26 @@ random.shuffle(valid_files)
 # generate Dataset
 train_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(train_files, 8),
+    args=(train_files, 7),
     output_types=(tf.float16, tf.float16),
-    output_shapes=([None, SEQ, 224, 224, 3], [None])
+    output_shapes=([None, SEQ, 112, 112, 3], [None])
 )
 
 valid_dataset = tf.data.Dataset.from_generator(
     data_generator,
-    args=(valid_files, 8),
+    args=(valid_files, 7),
     output_types=(tf.float16, tf.float16),
-    output_shapes=([None, SEQ, 224, 224, 3], [None])
+    output_shapes=([None, SEQ, 112, 112, 3], [None])
 )
 
 test_dataset = tf.data.Dataset.from_generator(
     testdata_generator,
-    args=(test_files, 8),
+    args=(test_files, 7),
     output_types=(tf.float16),
-    output_shapes=([None, SEQ, 224, 224, 3])
+    output_shapes=([None, SEQ, 112, 112, 3])
 )
+
+model.load_weights("/home/chilin/NYCU-Cloud-Computing-and-Big-Data-Analytics/HW1/best_model.hdf5")
 
 opt = tf.keras.optimizers.Adam(learning_rate=0.0001)
 model.compile(
@@ -223,7 +232,7 @@ history = model.fit(
     train_dataset,
     validation_data=valid_dataset,
     epochs=20,
-    batch_size=8,
+    batch_size=7,
     callbacks=[checkpoint],
     shuffle=True
 )
