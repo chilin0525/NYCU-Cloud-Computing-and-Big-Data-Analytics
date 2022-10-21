@@ -133,8 +133,8 @@ def testdata_generator(filename_list: List[str], batch_size=1):
 
 
 
-train_dir_path = "/home/chilin/NYCU-Cloud-Computing-and-Big-Data-Analytics/HW1/train"
-test_dir_path = "/home/chilin/NYCU-Cloud-Computing-and-Big-Data-Analytics/HW1/test"
+train_dir_path = "train"
+test_dir_path = "test"
 
 # list all dir under train folder
 train_dirs = os.listdir(train_dir_path)
@@ -219,6 +219,7 @@ test_dataset = tf.data.Dataset.from_generator(
     output_shapes=([None, SEQ, 112, 112, 3])
 )
 
+model.load_weights("43.hdf5")
 
 opt = tf.keras.optimizers.Adam(learning_rate=0.0001)
 model.compile(
@@ -227,16 +228,16 @@ model.compile(
     metrics=['accuracy']
 )
 
-from tensorflow.keras.callbacks import ModelCheckpoint
-checkpoint = ModelCheckpoint("best_model.hdf5", monitor='loss', verbose=1, save_best_only=True, mode='auto', period=1, save_weights_only=True)
-history = model.fit(
-    train_dataset,
-    validation_data=valid_dataset,
-    epochs=10,
-    batch_size=8,
-    callbacks=[checkpoint],
-    shuffle=True
-)
+# from tensorflow.keras.callbacks import ModelCheckpoint
+# checkpoint = ModelCheckpoint("best_model.hdf5", monitor='loss', verbose=1, save_best_only=True, mode='auto', period=1, save_weights_only=True)
+# history = model.fit(
+#     train_dataset,
+#     validation_data=valid_dataset,
+#     epochs=10,
+#     batch_size=8,
+#     callbacks=[checkpoint],
+#     shuffle=True
+# )
 # model.save(f"Mobilenet_10_15")
 # model = tf.keras.models.load_model(f"CNN_10_11")
 
@@ -281,4 +282,4 @@ df = pd.DataFrame({
     "name": [i.split("/")[-1] for i in test_files],
     "label": y_pred
 })
-df.to_csv("1021.csv", index=False)
+df.to_csv("result.csv", index=False)
